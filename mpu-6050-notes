@@ -1,0 +1,185 @@
+-reset value=0
+
+-reg 0x13:0x18 Gyro-offset [XYZ]G_OFFS_USR[HL] (8-bit signed)
+	inizialmente a 0
+	+- 1000dps (gradi/secondi) (1dps=32.8 LSB)
+
+-reg 0x06:0x0b [XYZ]G_OFFS_USR[HL] (8-bit signed)
+	inizialmente valore di fabbrica, al nuovo offset va sottratto il valore iniziale
+	+- 8G 1mg=4096 LSB
+	il bit 0 della parte bassa é riservato e va preservato, indica se é in funzione la compensazione della temperatura
+	
+
+-reg 19_25 SMPLRT_DIV (8-bit unsigned)
+	sample rate= gyroscope out rate/(1+smplrt-div)
+	frequenza di campionamento per l'output di: resgistri, FIFO e DMP
+	gyroscope-output-rate=8kHz con (DLPF_CFG disabled [0 o 7]) e 1kHz con DLPF_CFG enabled
+	campionamento massimo dell'accelerometro=1kHz (per campionamenti maggiori il valore sará ripetuto)
+
+-reg 1A_26 CONFIG (8-bit unsigned. 7:6 reserved; 5:3 EXT_SYNC_SET; 2:0 DLPF_CFG)
+	EXT_SYNC_SET o FSYNC sincronizza con un segnale esterno
+	DLPFG_CFG
+		VAL	BANDA_PASSANTE	DELAY		FREQ_CAMP	BANDA_PASSANTE	DELAY		FREQ_CAMP
+		0		260Hz				0ms		1kHz			256Hz				0.98ms	8kHz
+		1		184Hz				2ms		"				188Hz				1.9ms		1kHz
+		2		94					3			"				98					2.8		"
+		3		44					4.9		"				42					4.8		"
+		4		21					8.5		"				20					8.3		"
+		5		10					13.8		"				10					13.4		"
+		6		5					19			"				5					18.8		"
+		7		RISERVATO									RISERVATO					8
+	
+-reg 1B_27 GYRO_CONFIG (8-bit. 7:5 self-test assi xyz; 4:3 FS_SEL)
+	self-test per controllo danneggiamento
+	FS_SEL valore massimo per il fondo scala
+	0=+- 250°/s
+	1=+- 500°/s
+	2=+- 1000°/s
+	3=+- 2000°/s
+	
+-reg 1C_28 ACCEL_CONFIG (8-bit. 7:5 self-test; 4:3 AFS_SEL)
+	AFS_SEL valore massimo per il fondo scale
+	0=+- 2g
+	1=+- 4g
+	2=+- 8g
+	3=+- 16g
+	
+-reg 23_35 FIFO_EN (8-bit. 1=enabled; 0=disabled)
+	determina quali misurazioni dovrenno essere inserite nel buffer FIFO.
+	se il bit é settato, la misurazione del relativo sensore sará inserita nel buffer.
+	bit	7=temperatura
+			6=asse x giroscopio
+			5=asse y giroscopio
+			4=asse z giroscopio
+			3=accelerometro
+			2=sensore slave2
+			1=sensore slave1
+			0=sensore slave0
+
+-reg 38_56 INT_ENABLE
+	attivazione degli interrupt
+	7=RISERVATO
+	6=RISERVATO
+	5=RISERVATO
+	4=FIFO_OFLOW_INT_EN
+	3=I2C_MST_INT_EN
+	2=RISERVATO
+	1=RISERVATO
+	0=DATA_RDY_EN
+
+-reg 3A_58 INT_STATUS (8-bit)
+	registro di controllo per lo stato degli interrupt.
+	resettato ad ogni lettura.
+	7=RISERVATO
+	6=RISERVATO
+	5=RISERVATO
+	5=FIFO_OFLOW_INT
+	4=I2C_MST_INT
+	3=DATA_RDY_INT
+	2=RISERVATO
+	1=RISERVATO
+	0=RISERVATO
+
+-regs 3B,3C,3D,3E,3F,40_59:64 ACCELEROMETRO (8-bit.)
+	misurazioni dell'accelerometro.
+	valori divisi in parte alta e parte bassa del valore finale (16-bit).
+	valore finale 16 bit in complemento a 2.
+	3B=ACCEL_XOUT_H=ACCEL_XOUT[15:8]
+	3C=ACCEL_XOUT_L=ACCEL_XOUT[7:0]
+	3D=ACCEL_YOUT_H=ACCEL_YOUT[15:8]
+	3E=ACCEL_YOUT_L=ACCEL_YOUT[7:0]
+	3F=ACCEL_ZOUT_H=ACCEL_ZOUT[15:8]
+	40=ACCEL_ZOUT_L=ACCEL_ZOUT[7:0]
+	la sensibilità cambia in base al valore di fondo scala
+	AFS_SEL	FULL_SCALE	LSB sensitivity
+		0			+-2g		16384 LSB/g
+		1			+-4g		8192	LSB/g
+		2			+-4g		4096	LSB/g
+		3			+-16g		2048	LSB/g
+	la lettura si ottiene dividendo il valore finale convertito in decimale per la sensibilità
+	
+-regs 41:42_65:66 TEMPERATURA (8-bit.)
+	parte alta e parte bassa della misurazione di temperatura.
+	TEMP_OUT espresso in complemento a 2
+	valore finale C=[(TEMP_OUT_H<<8)|TEMP_OUT_L]/340+36.53
+---------	echo "ibase=16; scale=3; ((-((FFFF-$TEMP)+1))/154)+24.87" | bc---------
+	
+-regs 43:48_67:72 GIROSCOPIO (8-bit)
+	stesso funzionamento dell'accelerometro
+	FS_SEL	FULL_SCALE	LSB sensitivity
+		0			+=250°/s		131 LSB/°/s
+		1			+-500°/s		65.5 LSB/°/s
+		2			+-1000°/s	32.8 LSB/°/s
+		3			+-2000°/s	16.4 LSB/°/s
+
+-reg 6A_106 USER_CTRL (8-bit)
+	attivazione e disattivazione FIFO, i2c master mode, interfaccia i2c
+	bit	7=RISERVATO
+			6=FIFO_EN
+			5=I2C_MST_EN
+			4=I2C_IF_DIS
+			3=RISERVATO
+			2=FIFO_RESET
+			1=I2C_MST_RESET
+			0=SIG_COND_RESET
+
+-reg 6B_107 PWR_MGMT_1 (8-bit)
+	registro di configurazione per: risparmio energetico, sorgente del clock, full reset, temperatura on/off.
+	bit	7=DEVICE_RESET
+			6=SLEEP
+			5=CYCLE
+			4=RISERVATO
+			3=TEMP_DIS
+			2:0=CLKSEL
+	-DEVICE_RESET
+		1= ripristina tutti i registri al  valore di default, una volta finito è automaticamente posto a 0
+	-SLEEP
+		1= imposta il dispositivo per il risparmio energetico
+	-CYCLE
+		1 e SLEEP=0--> switch continuo tra sleep_mode e wake_up.
+		il dispositivo viene "svegliato" con una frequenza pari al valore impostato in LP_WAKE_CTRL,
+		legge i valori dai sensori attivi e ritorna in sleep_mode
+	-TEMP_DIS
+		1= sensore di temperature disattivato
+		0= sensore di temperatura attivato
+	-CLKSEL (3-bit unsigned)
+		0=	clock interno 8MHz
+		1=	PLL(?) asse x giroscopio
+		2=	PLL(?) asse y giroscopio
+		3=	PLL(?) asse z giroscopio
+		4=	PLL(?) clock esterno a 32.768 kHz
+		5=	Pll(?) clock esterno a 19.2 MHz
+		6=	RISERVATO
+		7=	Stops the clock and keeps the timing generator in reset (??)
+
+-reg 6C_108 PWR_MGMT_2	(8-bit)
+	resitro per la configurazione di: frequenza di wake_up quando viene usato solo l'accelerometro in modalità basso consumo,
+	stand-by per i singoli assi di accelerometro e giroscopio.
+	-bit	7:6=LP_WAKE_CTRL		(2-bit unsigned)
+			5:3=STBY_[X|Y|Z]A		(1 mode=ON, 0 mode=OFF)
+			2:0=STBY_[X|Y|Z]G		(1 mode=ON, 0 mode=OFF)
+	sequenza di attivazione della modalitá accelerometro-basso consumo
+		-CYCLE=1
+		-SLEEP=0
+		-TEMP_DIS=1
+		-STBY_XG=STBY_YG=STBY_ZG=1
+	in modalità basso consumo il device spegne tutto eccetto l'interfaccia i²c primaria e risveglia l'accelerometro ad intervalli pari a LP_WAKE_CTRL
+		LP_WAKE_CTRL	wake_up-frequency
+			0					1.25	Hz
+			1					5		Hz
+			2					20		Hz
+			3					40		Hz
+
+-reg 72-73_114-115 FIFO_COUNT_[H|L]
+	numero di pacchetti presenti nella fifo
+	valore aggiornato quando il registro FIFO_COUNT_H viene letto
+
+-reg 74_116 FIFO_R_W
+	restro utilizzato per accedere ai pacchetti presenti nella fifo.
+	quanto la fifo va in overflow il bit FIFO_OFLOW_INT viene posto a 1
+	e i pacchetti più vecchi vengono sovrascritti
+
+-reg 75_117 WHO_AM_I (8-bit, WHO_AM_I[6:1])
+	contiene i 6 bit piú significativi dell'indirizzo i²c (7-bit)
+	default=0x68
+	poer-on-reset [6:1]= 110 100
