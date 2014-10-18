@@ -60,24 +60,12 @@ void i2cWrite(int dev, unsigned char reg, unsigned char val){
 		perror("Errore scrittura registro");
 		i2cWrite(dev,reg,val);
 	}
-/*	unsigned char buf[2]={0};*/
-/*	buf[0]=reg;*/
-/*	buf[1]=val;*/
-/*	printf("reg %hhx val %hhx\n",buf[0],buf[1]);*/
-/*	if(write(dev,buf,2)<2){*/
-		/*ERROR*/
-/*		printf("Errore scrittura dati da %X",reg);*/
-/*		perror("");*/
-/*		exit(1);*/
-/*	}*/
 }
 
 void i2cReadN(int dev, unsigned char *buf, unsigned char reg, int nbyte){
 	int i;
 	for(i=0;i<nbyte;i++){
 		buf[i]=(unsigned char)i2cRead(dev,reg+i)&0x000000ff;
-/*		i2cRead(dev,(buf+i),(reg+i));*/
-/*		printf("%X",reg+i);*/
 	}
 }
 
@@ -85,16 +73,8 @@ void i2cWriteN(int dev, unsigned char reg, unsigned char *vals, int nbyte){
 	int i;
 	for(i=0;i<nbyte;i++){
 		i2cWrite(dev,reg+i,vals[i]);
-/*		i2cWrite(dev,(reg+i),vals[i]);*/
 	}
 }
-/*int val[2]={0};*/
-/*int *testsm(int dev, unsigned char reg){*/
-
-/*	val[0]=i2c_smbus_read_byte_data(dev,reg);*/
-/*	val[1]=i2c_smbus_read_word_data(dev,reg);*/
-/*	return val;*/
-/*}*/
 
 int i2cBurstRead(int dev, unsigned char reg, unsigned char len, unsigned char *data){
 

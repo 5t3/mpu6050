@@ -5,16 +5,19 @@
 #include "h/mpu6050_const.h"
 #include <time.h>
 
-static double sub1off[6];
+/*decimal part of new offsets*/
+static double offDecimalPart[6]={0};
 
-inline double getSub1off(int ag, double *data){
-	data[0]-=sub1off[ag*3];
-	data[0]-=sub1off[(ag*3)+1];
-	data[0]-=sub1off[(ag*3)+2];
+/*return the decimal part of the offsets, ag=0 -> accelerometer, ag=1 -> gyroscope*/
+inline double getOffDecimalPart(int ag, double *data){
+	data[0]-=offDecimalPart[ag*3];
+	data[1]-=offDecimalPart[(ag*3)+1];
+	data[2]-=offDecimalPart[(ag*3)+2];
 }
 
+/*switch on the chip*/
 void startMpu(int dev){
-/*	unsigned char buf[2]={0};*/
+
 /*power on*/
 	i2cWrite(dev,PWR_MGMT_1,0x00);
 /*set sample rate at 50Hz*/
@@ -25,38 +28,55 @@ void startMpu(int dev){
 	i2cWrite(dev,FIFO_EN,0x78);
 /*enable interrupt register*/
 	i2cWrite(dev,INT_ENABLE,INT_FIFO_OFLOW_EN|INT_DATA_READY_EN);
-/*wait 100ms*/
+/*wait 100ms for a stable output*/
 	struct timespec wait;
 	wait.tv_sec=(long)0;
 	wait.tv_nsec=(long)100000000;
 	nanosleep(&wait,NULL);
 }
 
+/*switch off the chip*/
 void stopMpu(int dev){
-/*	unsigned char buf[2]={0};*/
+
+/*power off*/
 	i2cWrite(dev,PWR_MGMT_1,0x80);
+/*reset offsets array*/
+	int i=0;
+	for(i;i<6;i++){
+		offDecimalPart[i]=0;
+	}
 }
 
+/*simple busy-wait on data ready interrupt*/
 int bWaitDataReady(int dev){
 
+/*read interrupt state*/
 	unsigned char dr=i2cRead(dev,INT_STATUS)&0x01;
+/*busy-wait, do nothing until data ready bit is up*/
 	while(!dr){;
-/*		printf("waiting data ready %hhx\n",dr);*/
 		dr=i2cRead(dev,INT_STATUS);
 	}
-/*	printf("leaving\n");*/
 	return 1;
 }
 
+/*return temperature in celsius*/
 double getTemp(unsigned char *buf){
+
+/*build raw data*/
 	short int raw=(buf[0]<<8)|(buf[1]);
+/*conversion in celsius*/
 	double temp=((double)raw/340)+36.53;
 	return temp;
 }
 
+/*return accelerometer full-scale range*/
+/*usefull to convert raw data in m/s*/
 double getAccelFs(int dev){
+
 	double fs=0.0;
+/*read accelerometer configuration register*/
 	int cfg=i2cRead(dev,ACCEL_CONFIG);
+/*find actual full-scale*/
 	switch(cfg){
 		case AMASK_16:
 			fs=AFS_SEL_16;
@@ -80,9 +100,13 @@ double getAccelFs(int dev){
 	return fs;
 }
 
+/*return gyroscope full-scale range*/
 double getGyroFs(dev){
+	
 	double fs=0.0;
+/*read gyroscope configuration register*/	
 	int cfg=i2cRead(dev,GYRO_CONFIG);
+/*find actual full-scale*/
 	switch(cfg){
 		case GMASK_2000:
 			fs=FS_SEL_2000;
@@ -106,82 +130,109 @@ double getGyroFs(dev){
 	return fs;
 }
 
+/*convert raw data in human readable format, m/s or °/s*/
+/*dev = i2c device file descriptor
+raw = array containing raw values
+ag = accelerometer/gyroscope selector 0/1
+data = array to return converted values*/
 void buildAGdata(int dev, unsigned char *raw, int ag, double *data){
 
 	double fs=0.0;
+/*build raw data*/
 	short int rawx=(raw[0]<<8)|raw[1];
 	short int rawy=(raw[2]<<8)|raw[3];
 	short int rawz=(raw[4]<<8)|raw[5];
+/*accelerometer 0, gyroscope 1*/
 	if(!ag){
+	/*get full-scale*/
 		fs=getAccelFs(dev);
+	/*add offset decimal part*/
+		data[0]=-offDecimalPart[0];
+		data[1]=-offDecimalPart[1];
+		data[2]=-offDecimalPart[2];
 	}
 	else{
 		fs=getGyroFs(dev);
+		data[0]=-offDecimalPart[3];
+		data[1]=-offDecimalPart[4];
+		data[2]=-offDecimalPart[5];
 	}
-
-	data[0]=rawx/fs;
-	data[1]=rawy/fs;
-	data[2]=rawz/fs;
-	data[3]=fs;
+/*convert data in m/s or °/s*/
+	data[0]+=rawx/fs;
+	data[1]+=rawy/fs;
+	data[2]+=rawz/fs;
+	data[3]+=fs;
 }
 
+/*TODO ... ISSUE = increase error*/
 /*@param: device*/
-/*@param: accelerometer values in current full scale range*/
+/*@param: accelerometer values in m/s*/
 void setAccelOffset(int dev, double *accel_val){
 
+/*get acceleration values and conversion*/
+	double actualx=accel_val[0]*AFS_SEL_8;
+	double actualy=accel_val[1]*AFS_SEL_8;
+	double actualz=accel_val[2]*AFS_SEL_8;
+	
+/*read factory offsets*/
 	unsigned char off[6]={0};
 	i2cReadN(dev,off,XA_OFFS_USERH,6);
-	/*get acceleration values*/
-
-	double newx=accel_val[0]*AFS_SEL_8;
-	double newy=accel_val[1]*AFS_SEL_8;
-	double newz=accel_val[2]*AFS_SEL_8;
 	
-	/*get temperature compesation bit*/
+/*get temperature compesation bit*/
 	unsigned char tempComp[3]={0};
 	unsigned char mask=0x01;
 	tempComp[0]=off[1]&mask;
 	tempComp[1]=off[3]&mask;
 	tempComp[2]=off[5]&mask;
 
-	/*build new offsets*/
-	unsigned int xoff=(off[0]<<8)|off[1];
-	unsigned int yoff=(off[2]<<8)|off[3];
-	unsigned int zoff=(off[4]<<8)|off[5];
+/*build offsets*/
+	short int xoff=(off[0]<<8)|off[1];
+	short int yoff=(off[2]<<8)|off[3];
+	short int zoff=(off[4]<<8)|off[5];
 	
+/*add actual data to factory offsets*/
+	xoff-=(int)actualx;
+	yoff-=(int)actualy;
+	zoff-=(int)actualz;
+	
+/*save offsets decimal parts*/
+	offDecimalPart[0]=(actualx-(int)actualx)/AFS_SEL_8;
+	offDecimalPart[1]=(actualy-(int)actualy)/AFS_SEL_8;
+	offDecimalPart[2]=(actualz-(int)actualz)/AFS_SEL_8;
+	
+/*split data in bytes and set temperature compensation to lower part*/
 	unsigned char noff[6]={0};
-	xoff-=newx;
-	yoff-=newy;
-	zoff-=newz;
-	/*set temperature compensation*/
-
 	noff[0]=(xoff>>8)&0xff;
-	noff[1]=(xoff&0xff)|tempComp[0];	
+	noff[1]=(xoff&0xfe)|tempComp[0];	
 	noff[2]=(yoff>>8)&0xff;
-	noff[3]=(yoff&0xff)|tempComp[1];
+	noff[3]=(yoff&0xfe)|tempComp[1];
 	noff[4]=(zoff>>8)&0xff;
-	noff[5]=(zoff&0xff)|tempComp[2];
+	noff[5]=(zoff&0xfe)|tempComp[2];
 	
-	/*write new offset*/
+/*write new offset*/
 	i2cWriteN(dev, XA_OFFS_USERH, noff, 6);
 }
 
 /*@param: device*/
-/*@param: gyroscope values in current full scale range*/
+/*@param: gyroscope values in °/s*/
 void setGyroOffset(int dev, double *gyro_val){
 
+/*conversion*/
 	double newx=-(gyro_val[0]*FS_SEL_1000);
 	double newy=-(gyro_val[1]*FS_SEL_1000);
 	double newz=-(gyro_val[2]*FS_SEL_1000);
-
+/*save offsets decimal parts*/
+	offDecimalPart[3]=(newx-(int)newx)/FS_SEL_1000;
+	offDecimalPart[4]=(newy-(int)newy)/FS_SEL_1000;
+	offDecimalPart[5]=(newz-(int)newz)/FS_SEL_1000;
+/*split data in byte*/
 	unsigned char off[6]={0};
-
-	off[0]=(((unsigned int)newx)>>8)&0xff;
-	off[1]=((unsigned int)newx)&0xff;
-	off[2]=(((unsigned int)newy)>>8)&0xff;
-	off[3]=((unsigned int)newy)&0xff;
-	off[4]=(((unsigned int)newz)>>8)&0xff;
-	off[5]=((unsigned int)newz)&0xff;
+	off[0]=(((short int)newx)>>8)&0xff;
+	off[1]=((short int)newx)&0xff;
+	off[2]=(((short int)newy)>>8)&0xff;
+	off[3]=((short int)newy)&0xff;
+	off[4]=(((short int)newz)>>8)&0xff;
+	off[5]=((short int)newz)&0xff;
 	
 	i2cWriteN(dev,XG_OFFS_USERH,off,6);
 }
@@ -245,10 +296,13 @@ void setGyroOffset(int dev, double *gyro_val){
 /*	i2cWrite(dev,USER_CTRL,FIFO_RESET|saveu);*/
 /*}*/
 
+/*return fifo bytes count*/
 int getFifoCount(int dev){
 
 	unsigned char buf[2]={0};
+/*read fifo count registers*/
 	i2cReadN(dev,buf,FIFO_COUNT_H,2);
+/*build data*/
 	int c=((buf[0]<<8)&0x0000ff00)|(buf[1]&0x000000ff);
 	return c;
 }
@@ -257,7 +311,7 @@ int getFifoCount(int dev){
 /*param: dev=device file descriptor*/
 /*param: buf=buffer for fifo data*/
 int getFifoData(int dev, unsigned char *buf){
-
+/*packet lenght and byte count*/
 	int packet_l=0;
 	int byte_count=0;
 /*check if fifo is enabled*/
@@ -265,28 +319,38 @@ int getFifoData(int dev, unsigned char *buf){
 		return 0;
 	}
 /*count how many bytes in a packet*/
+/*read fifo configuration register, which sensor write his data to the fifo*/
 	unsigned char mask=i2cRead(dev,FIFO_EN);
+	/*temperature*/
 	packet_l=FIFO_PACKET_LEN*(mask>>7);
+	/*gyroscope x,y,z axis*/
 	packet_l+=FIFO_PACKET_LEN*((mask&FIFO_GYRO_X_OUT)>>6);
 	packet_l+=FIFO_PACKET_LEN*((mask&FIFO_GYRO_Y_OUT)>>5);
 	packet_l+=FIFO_PACKET_LEN*((mask&FIFO_GYRO_Z_OUT)>>4);
+	/*accelerometer*/
 	packet_l+=FIFO_PACKET_LEN*((mask&FIFO_ACC_OUT)>>3)*3;
 
 /*fifo packet count*/
 	int c=getFifoCount(dev);
 	
-/*check for odd packet count, fifo overflow or fifo thrashold (50%) --> reset fifo*/	
+/*check for fifo overflow, fifo thrashold (50%) or odd byte count --> reset fifo*/
 	if( (i2cRead(dev,INT_STATUS) >> 4) || c>(FIFO_MAX_PACKET/2) || c&1 ){
+	/*save configuration register*/
 		unsigned char s=i2cRead(dev,USER_CTRL) & 0x00ff;
+	/*reset fifo*/
 		i2cWrite(dev,USER_CTRL,FIFO_RESET);
+	/*reconfigure fifo*/
 		i2cWrite(dev,USER_CTRL,s);
+	/*get new byte count*/
 		c=getFifoCount(dev);
-		printf("fifo reset\n");
 	}
 /*fill buffer with fifo data*/
 	int i;
+	/*for step depends on how many bytes in a packet*/
 	for(i=0;i<c;i+=packet_l){
+	/*read a packet with a single i2c command*/
 		byte_count+=i2cBurstRead(dev,FIFO_R_W,packet_l,&buf[i]);
+	/*wait for register refresh*/
 		bWaitDataReady(dev);
 	}
 	return byte_count;
@@ -296,11 +360,11 @@ int getFifoData(int dev, unsigned char *buf){
 /*return order... accelerometer [x,y,z], temperature, gyroscope [x,y,z]*/
 int averageFifo(int dev, double *av, int nsample){
 
-/*check if fifo is enabled*/
+	/*check if fifo is enabled*/
 	if(!(i2cRead(dev,USER_CTRL)>>6)){
 		return 0;
 	}
-/*which sensors are enabled*/	
+	/*which sensors are enabled*/	
 	int temp_flag, gyro_flag, acc_flag, gyrox_flag, gyroy_flag, gyroz_flag;
 	unsigned char fifo_en=i2cRead(dev,FIFO_EN);
 	temp_flag=fifo_en>>7;
@@ -310,10 +374,9 @@ int averageFifo(int dev, double *av, int nsample){
 	gyro_flag=gyrox_flag+gyroy_flag+gyroz_flag;
 	acc_flag=(fifo_en&FIFO_ACC_OUT)>>3;
 
-/*packet lenght*/	
+	/*packet lenght*/	
 	int packet_l=((temp_flag+gyro_flag)*FIFO_PACKET_LEN)+acc_flag*3*FIFO_PACKET_LEN;
-	printf("packet lenght %d\n",packet_l);
-/*get data from fifo*/
+	/*get data from fifo*/
 	double tempSum, gyroXsum, gyroYsum, gyroZsum, accXsum, accYsum, accZsum;
 	int s=0;
 	int count=0;
@@ -322,6 +385,7 @@ int averageFifo(int dev, double *av, int nsample){
 		unsigned char fifo[1024]={0};
 		int c=0;
 		count=getFifoData(dev,fifo);
+		/*sum data for al packets only if packet is complete*/
 		while(c<count && (count-c)>=packet_l){
 		
 			if(acc_flag){
@@ -329,6 +393,7 @@ int averageFifo(int dev, double *av, int nsample){
 				accXsum+=tmp[0];
 				accYsum+=tmp[1];
 				accZsum+=tmp[2];
+				/*move fifo index*/
 				c+=(FIFO_PACKET_LEN*3);
 			}
 			if(temp_flag){
@@ -361,10 +426,20 @@ int averageFifo(int dev, double *av, int nsample){
 			}
 		s++;
 		}
+		/*read all packets, reset fifo*/
 		i2cWrite(dev,USER_CTRL,0x44);
 	}
 	int div=s;
 	int i=0;
+	if(acc_flag){
+		av[i]=accXsum/div;
+		av[i+1]=accYsum/div;
+		av[i+2]=accZsum/div;
+		printf("acc X average= %.3f\n",av[i]);
+		printf("acc Y average= %.3f\n",av[i+1]);
+		printf("acc Z average= %.3f\n",av[i+2]);
+		i+=3;
+	}
 	if(temp_flag){
 		av[i]=tempSum/div;
 		printf("temp average= %.3f, summ=%.3f, count=%d\n",av[i],tempSum,div);
@@ -384,14 +459,6 @@ int averageFifo(int dev, double *av, int nsample){
 		av[i]=gyroZsum/div;
 		printf("gyro Z average= %.3f\n",av[i]);
 		i++;
-	}
-	if(acc_flag){
-		av[i]=accXsum/div;
-		av[i+1]=accYsum/div;
-		av[i+2]=accZsum/div;
-		printf("acc X average= %.3f\n",av[i]);
-		printf("acc Y average= %.3f\n",av[i+1]);
-		printf("acc Z average= %.3f\n",av[i+2]);
 	}
 	return 1;
 }
