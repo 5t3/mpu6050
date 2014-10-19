@@ -5,14 +5,14 @@
 #include "h/mpu6050_const.h"
 #include <time.h>
 
-/*decimal part of new offsets*/
-static double offDecimalPart[6]={0};
+/*sensors offsets*/
+static double offsets[6]={0};
 
-/*return the decimal part of the offsets, ag=0 -> accelerometer, ag=1 -> gyroscope*/
-inline double getOffDecimalPart(int ag, double *data){
-	data[0]-=offDecimalPart[ag*3];
-	data[1]-=offDecimalPart[(ag*3)+1];
-	data[2]-=offDecimalPart[(ag*3)+2];
+/*return sensors offsets, ag=0 -> accelerometer, ag=1 -> gyroscope*/
+inline double getoffsets(int ag, double *data){
+	data[0]-=offsets[ag*3];
+	data[1]-=offsets[(ag*3)+1];
+	data[2]-=offsets[(ag*3)+2];
 }
 
 /*switch on the chip*/
@@ -43,7 +43,7 @@ void stopMpu(int dev){
 /*reset offsets array*/
 	int i=0;
 	for(i;i<6;i++){
-		offDecimalPart[i]=0;
+		offsets[i]=0;
 	}
 }
 
@@ -147,21 +147,29 @@ void buildAGdata(int dev, unsigned char *raw, int ag, double *data){
 	/*get full-scale*/
 		fs=getAccelFs(dev);
 	/*add offset decimal part*/
-		data[0]=-offDecimalPart[0];
-		data[1]=-offDecimalPart[1];
-		data[2]=-offDecimalPart[2];
+		data[0]=-offsets[0];
+		data[1]=-offsets[1];
+		data[2]=-offsets[2];
 	}
 	else{
 		fs=getGyroFs(dev);
-		data[0]=-offDecimalPart[3];
-		data[1]=-offDecimalPart[4];
-		data[2]=-offDecimalPart[5];
+		data[0]=-offsets[3];
+		data[1]=-offsets[4];
+		data[2]=-offsets[5];
 	}
 /*convert data in m/s or °/s*/
 	data[0]+=rawx/fs;
 	data[1]+=rawy/fs;
 	data[2]+=rawz/fs;
 	data[3]+=fs;
+}
+
+/*fallback function to set offsets without using the registers*/
+/*ag = 0 -> accelerometer, ag = 1 -> gyroscope, off = array of converted values*/
+void setOffsets(int ag, double *off){
+	offsets[ag*3]=off[0];
+	offsets[(ag*3)+1]=off[1];
+	offsets[(ag*3)+2]=off[2];
 }
 
 /*TODO ... ISSUE = increase error*/
@@ -173,7 +181,7 @@ void setAccelOffset(int dev, double *accel_val){
 	double actualx=accel_val[0]*AFS_SEL_8;
 	double actualy=accel_val[1]*AFS_SEL_8;
 	double actualz=accel_val[2]*AFS_SEL_8;
-	
+/*printf("actual_vals %x %x %x\n",(int)actualx,(int)actualy,(int)actualz);	*/
 /*read factory offsets*/
 	unsigned char off[6]={0};
 	i2cReadN(dev,off,XA_OFFS_USERH,6);
@@ -189,17 +197,18 @@ void setAccelOffset(int dev, double *accel_val){
 	short int xoff=(off[0]<<8)|off[1];
 	short int yoff=(off[2]<<8)|off[3];
 	short int zoff=(off[4]<<8)|off[5];
-	
+/*printf("factory offsets %hx %hx %hx\n",xoff,yoff,zoff);*/
 /*add actual data to factory offsets*/
 	xoff-=(int)actualx;
 	yoff-=(int)actualy;
 	zoff-=(int)actualz;
 	
 /*save offsets decimal parts*/
-	offDecimalPart[0]=(actualx-(int)actualx)/AFS_SEL_8;
-	offDecimalPart[1]=(actualy-(int)actualy)/AFS_SEL_8;
-	offDecimalPart[2]=(actualz-(int)actualz)/AFS_SEL_8;
-	
+	offsets[0]=(actualx-(int)actualx)/AFS_SEL_8;
+	offsets[1]=(actualy-(int)actualy)/AFS_SEL_8;
+	offsets[2]=(actualz-(int)actualz)/AFS_SEL_8;
+/*printf("offsets array %.5f %.5f %.5f\n",offsets[0],offsets[1],offsets[2]);*/
+
 /*split data in bytes and set temperature compensation to lower part*/
 	unsigned char noff[6]={0};
 	noff[0]=(xoff>>8)&0xff;
@@ -213,6 +222,7 @@ void setAccelOffset(int dev, double *accel_val){
 	i2cWriteN(dev, XA_OFFS_USERH, noff, 6);
 }
 
+/*TODO ... ISSUE = not enought*/
 /*@param: device*/
 /*@param: gyroscope values in °/s*/
 void setGyroOffset(int dev, double *gyro_val){
@@ -222,9 +232,10 @@ void setGyroOffset(int dev, double *gyro_val){
 	double newy=-(gyro_val[1]*FS_SEL_1000);
 	double newz=-(gyro_val[2]*FS_SEL_1000);
 /*save offsets decimal parts*/
-	offDecimalPart[3]=(newx-(int)newx)/FS_SEL_1000;
-	offDecimalPart[4]=(newy-(int)newy)/FS_SEL_1000;
-	offDecimalPart[5]=(newz-(int)newz)/FS_SEL_1000;
+	offsets[3]=(newx-(int)newx)/FS_SEL_1000;
+	offsets[4]=(newy-(int)newy)/FS_SEL_1000;
+	offsets[5]=(newz-(int)newz)/FS_SEL_1000;
+/*printf("offsets array %.5f %.5f %.5f\n",offsets[0],offsets[1],offsets[2]);*/
 /*split data in byte*/
 	unsigned char off[6]={0};
 	off[0]=(((short int)newx)>>8)&0xff;
@@ -236,65 +247,6 @@ void setGyroOffset(int dev, double *gyro_val){
 	
 	i2cWriteN(dev,XG_OFFS_USERH,off,6);
 }
-
-/**/
-/*double averageFullFifo(int dev, unsigned char mask, double *av){*/
-/*	int savef=i2cRead(dev,FIFO_EN);*/
-/*	unsigned char saveu=(unsigned char)i2cRead(dev,USER_CTRL);*/
-/*	unsigned char fifo[1024]={0};*/
-/*	double data[4];*/
-/*	double avx=0;*/
-/*	double avy=0;*/
-/*	double avz=0;	*/
-/*	int i=0;*/
-/*	int c=0;*/
-/*	int ag=0;*/
-/*	double fs=0.0;*/
-/*	*/
-/*	if (mask==FIFO_GYRO_X_OUT|FIFO_GYRO_Y_OUT|FIFO_GYRO_Z_OUT){*/
-/*		i2cWrite(dev,FIFO_EN,FIFO_GYRO_X_OUT|FIFO_GYRO_Y_OUT|FIFO_GYRO_Z_OUT);*/
-/*		ag=0;*/
-/*	}*/
-/*	if (mask==FIFO_ACC_OUT){*/
-/*		i2cWrite(dev,FIFO_EN,FIFO_ACC_OUT);*/
-/*		ag=1;*/
-/*	}*/
-/*	*/
-/*	i2cWrite(dev,USER_CTRL,FIFO_RESET|saveu);*/
-/*	unsigned int st=i2cRead(dev,INT_STATUS);*/
-/*while((c=getFifoCount(dev))<1024);*/
-/*		*/
-/*	st=i2cRead(dev,INT_STATUS);*/
-
-/*while(i<c){*/
-/*	i2cBurstRead(dev,FIFO_R_W,6,&fifo[i]);*/
-/*	i+=6;*/
-/*}*/
-/*i=0;	*/
-/*	while (i<c){*/
-/*		buildAGdata(dev,&fifo[i],ag,data);*/
-/*		double x,y,z,f;*/
-/*		x=data[0];*/
-/*		y=data[1];*/
-/*		z=data[2];*/
-/*		f=data[3];*/
-/*printf("%f %f %f %f/",x,y,z,f);*/
-/*		avx+=data[0];*/
-/*		avy+=data[1];*/
-/*		avy+=data[2];*/
-/*		i+=6;*/
-/*printf("\n");*/
-/*	*/
-/*	}*/
-
-/*	av[0]=avx/(i/6);*/
-/*	av[1]=avy/(i/6);*/
-/*	av[2]=avz/(i/6);*/
-/*		*/
-/*	printf("av %f %f %f",av[0],av[1],av[2]);*/
-/*	i2cWrite(dev,FIFO_EN,(unsigned int)(savef&0xff));*/
-/*	i2cWrite(dev,USER_CTRL,FIFO_RESET|saveu);*/
-/*}*/
 
 /*return fifo bytes count*/
 int getFifoCount(int dev){
@@ -435,29 +387,29 @@ int averageFifo(int dev, double *av, int nsample){
 		av[i]=accXsum/div;
 		av[i+1]=accYsum/div;
 		av[i+2]=accZsum/div;
-		printf("acc X average= %.3f\n",av[i]);
-		printf("acc Y average= %.3f\n",av[i+1]);
-		printf("acc Z average= %.3f\n",av[i+2]);
+/*		printf("acc X average= %.3f\n",av[i]);*/
+/*		printf("acc Y average= %.3f\n",av[i+1]);*/
+/*		printf("acc Z average= %.3f\n",av[i+2]);*/
 		i+=3;
 	}
 	if(temp_flag){
 		av[i]=tempSum/div;
-		printf("temp average= %.3f, summ=%.3f, count=%d\n",av[i],tempSum,div);
+/*		printf("temp average= %.3f, summ=%.3f, count=%d\n",av[i],tempSum,div);*/
 		i++;
 	}
 	if(gyrox_flag){
 		av[i]=gyroXsum/div;
-		printf("gyro X average= %.3f\n",av[i]);
+/*		printf("gyro X average= %.3f\n",av[i]);*/
 		i++;
 	}
 	if(gyroy_flag){
 		av[i]=gyroYsum/div;
-		printf("gyro Y average= %.3f\n",av[i]);
+/*		printf("gyro Y average= %.3f\n",av[i]);*/
 		i++;
 	}
 	if(gyroz_flag){
 		av[i]=gyroZsum/div;
-		printf("gyro Z average= %.3f\n",av[i]);
+/*		printf("gyro Z average= %.3f\n",av[i]);*/
 		i++;
 	}
 	return 1;

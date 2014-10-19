@@ -4,7 +4,7 @@
 	inizialmente a 0
 	+- 1000dps (gradi/secondi) (1dps=32.8 LSB)
 
--reg 0x06:0x0b [XYZ]G_OFFS_USR[HL] (8-bit signed)
+-reg 0x06:0x0b [XYZ]A_OFFS_USR[HL] (8-bit signed)
 	inizialmente valore di fabbrica, al nuovo offset va sottratto il valore iniziale
 	+- 8G 1mg=4096 LSB
 	il bit 0 della parte bassa é riservato e va preservato, indica se é in funzione la compensazione della temperatura
