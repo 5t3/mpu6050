@@ -26,7 +26,7 @@ sigaction(SIGINT,&sig,NULL);
 /*300ms*/
 struct timespec wait;
 wait.tv_sec=(long)0;
-wait.tv_nsec=(long)300000000;
+wait.tv_nsec=(long)200000000;
 int ch;
 
 	initscr();
@@ -42,6 +42,8 @@ int ch;
 	mvaddstr(4,0,"Giroscopio:");
 	mvaddstr(5,0,"Type 'c' to update offset registers:");
 	mvaddstr(6,0,"Type 'r' to reset the device:");
+	mvaddstr(7,0,"Type 'f' to set a low pass filter:");
+	mvaddstr(8,0,"Type 'd' to set the output data rate:");
 	refresh();
 	
 	unsigned char buf[6]={0};
@@ -89,7 +91,7 @@ int ch;
 		mvprintw(4,16,"%.3f",gx);
 		mvprintw(4,26,"%.3f",gy);
 		mvprintw(4,36,"%.3f",gz);
-		move(7,0);
+		move(9,0);
 		ch=getch();
 		switch(ch){
 				double av[7]={0};
@@ -104,9 +106,23 @@ int ch;
 				stopMpu(dev);
 				startMpu(dev);
 				break;
+			case 's':
+				
+				break;
+			case 'f':
+				timeout(-1);
+				printw("%s\n",DLPF_TABLE);
+				printw("select a value between 0 and 6:\n");
+				refresh();
+				ch=getch();
+				setDLPF(dev,atoi((const char*)&ch));
+				move(9,0);
+				timeout(0);
+				break;
 			default:
 				break;
 		}
+		clrtobot();
 		refresh();
 	}
 	nanosleep(&wait,NULL);

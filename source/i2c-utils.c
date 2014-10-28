@@ -48,10 +48,11 @@ unsigned int i2cRead(int dev, unsigned char reg){
 	if(ret>=0){
 		return (unsigned int)ret&0x000000ff;
 	}
-	else
-		perror("Errore lettura registro");
-		printf("%d %d\n",dev,reg);
+	else{
+/*		perror("Errore lettura registro");*/
+/*		printf("%d %d\n",dev,reg);*/
 		i2cRead(dev,reg);
+	}
 }
 
 void i2cWrite(int dev, unsigned char reg, unsigned char val){

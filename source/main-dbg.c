@@ -81,6 +81,16 @@ void main(){
 						stopMpu(dev);
 						startMpu(dev);
 						break;
+					case 's':
+						printf("type a value in HZ");
+/*						setDLPF(dev,)*/
+						break;
+					case 'f':
+						printf("%s\n",DLPF_TABLE);
+						printf("select a value between 0 and 6:\n");
+						scanf("%d",&ch);
+						setDLPF(dev,ch);
+						break;
 					default:
 						break;
 				}

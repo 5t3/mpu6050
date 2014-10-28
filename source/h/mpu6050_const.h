@@ -114,3 +114,5 @@
 #define GAMASK_2 AMASK_8
 #define GAMASK_1 AMASK_4
 #define GAMASK_0 AMASK_2
+
+static const char *DLPF_TABLE="VAL   BANDWIDTH   DELAY   FREQ_CAMP   BANDWIDTH   DELAY   FREQ_CAMP\n0     260Hz       0ms       1kHz      256Hz       0.98ms  8kHz\n1     184Hz       2ms       1kHz      188Hz       1.9ms   1kHz\n2     94Hz        3ms       1kHz      98Hz        2.8ms   1kHz\n3     44Hz        4.9ms     1kHz      42Hz        4.8ms   1kHz\n4     21Hz        8.5ms     1kHz      20Hz        8.3ms   1kHz\n5     10Hz        13.8ms    1kHz      10Hz        13.4ms  1kHz\n6     5Hz         19ms      1kHz      5Hz         18.8ms  1kHz";
