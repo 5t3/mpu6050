@@ -20,7 +20,7 @@ void startMpu(int dev){
 
 /*power on*/
 	i2cWrite(dev,PWR_MGMT_1,0x00);
-/*set sample rate at 50Hz*/
+/*set sample rate at 100Hz*/
 	i2cWrite(dev,SMPLRT_DIV,0x4f);
 /*enable fifo*/
 	i2cWrite(dev,USER_CTRL,0x40);
@@ -416,7 +416,7 @@ int averageFifo(int dev, double *av, int nsample){
 }
 
 void setDLPF(int dev, int val){
-printf("%d",val);
+
 	if(val<0){
 		val=0;
 	}
@@ -429,21 +429,18 @@ printf("%d",val);
 /*set the sample output data rate*/
 /*i2c device file descriptor, desired value in Hz*/
 void setSampleRateDiv(int dev, int val){
-/*min and max values*/
-	if(val<0){
-		val=0;
-	}
-	if(val>255){
-		val=255;
-	}
+
 /*get digital low pass filter value*/
 /*if value is equal to 0 or 7, the gyroscope output rate is 8KHz, 1KHz otherwise*/
 	int gor=i2cRead(dev,CONFIG)&0x00000007;
 	if(gor==0 || gor==7){
-		gor=8*(10^3);
+		gor=8000;
 	}
 	else
-		gor=1*(10^3);
-	int raw=gor/(1+val);
-	i2cWrite(dev,CONFIG,(unsigned int)raw&0x000000ff);
+		gor=1000;
+	int raw=0;
+	if(val>0){
+		raw=(gor/val)-1;
+	}
+	i2cWrite(dev,SMPLRT_DIV,(unsigned char)raw);
 }

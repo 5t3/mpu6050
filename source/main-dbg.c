@@ -82,8 +82,9 @@ void main(){
 						startMpu(dev);
 						break;
 					case 's':
-						printf("type a value in HZ");
-/*						setDLPF(dev,)*/
+						printf("type a value in HZ:\n");
+						scanf("%d",&ch);
+						setSampleRateDiv(dev,ch);
 						break;
 					case 'f':
 						printf("%s\n",DLPF_TABLE);

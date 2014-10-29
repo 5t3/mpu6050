@@ -43,7 +43,7 @@ int ch;
 	mvaddstr(5,0,"Type 'c' to update offset registers:");
 	mvaddstr(6,0,"Type 'r' to reset the device:");
 	mvaddstr(7,0,"Type 'f' to set a low pass filter:");
-	mvaddstr(8,0,"Type 'd' to set the output data rate:");
+	mvaddstr(8,0,"Type 's' to set the output data rate:");
 	refresh();
 	
 	unsigned char buf[6]={0};
@@ -107,7 +107,16 @@ int ch;
 				startMpu(dev);
 				break;
 			case 's':
-				
+				timeout(-1);
+				printw("type a value in HZ and press ENTER\n");
+				refresh();
+				char str[]={0};
+				echo();
+				getstr(str);
+				setSampleRateDiv(dev,atoi((const char*)str));
+				move(9,0);
+				timeout(0);
+				noecho();
 				break;
 			case 'f':
 				timeout(-1);
@@ -125,7 +134,7 @@ int ch;
 		clrtobot();
 		refresh();
 	}
-	nanosleep(&wait,NULL);
+		nanosleep(&wait,NULL);
 		i=i2cRead(dev,INT_STATUS);
 	}
 	endwin();
