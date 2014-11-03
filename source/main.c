@@ -3,11 +3,14 @@
 #include "h/i2c-utils.h"
 #include "h/mpu6050.h"
 #include "h/mpu6050_const.h"
+#include "h/log.h"
 #include <time.h>
 #include <signal.h>
 #include <stdlib.h>
+#include <string.h>
 
 int dev=0;
+int flog=0;
 
 /*terminal interrupt handler*/
 void ctrlcHandler(int s){
@@ -17,11 +20,59 @@ void ctrlcHandler(int s){
 	exit(0);
 }
 
-void main(){
+/*alarm signal handler*/
+void mNightHandler(int s){
+	close(flog);
+	flog=init_log();
+/*get seconds to tomorrow midnight*/
+	time_t now=time(NULL);
+	time_t tom=time(NULL);
+	tom=tom+(60*60*24);
+	struct tm *bktom;
+	bktom=localtime(&tom);
+	bktom->tm_sec=0;
+	bktom->tm_min=0;
+	bktom->tm_hour=0;
+	time_t ttom=mktime(bktom);
+	double dif=difftime(ttom,now);
+/*set new alarm*/
+	alarm((int)dif);
+}
+
+void main(int argc, char *argv[]){
+
+int log=0;
+struct timespec tstamp;
+if(argc>1){
+	char *a=strtok(argv[1],"-");
+	if(a!=NULL && *a=='l'){
+		log=1;
+		flog=init_log();
+	}
+}
 /*set handler*/
 struct sigaction sig;
 sig.sa_handler=ctrlcHandler;
 sigaction(SIGINT,&sig,NULL);
+
+if(log){
+	struct sigaction sig;
+	sig.sa_handler=mNightHandler;
+	sigaction(SIGALRM,&sig,NULL);
+/*get seconds to tomorrow midnight*/
+	time_t now=time(NULL);
+	time_t tom=time(NULL);
+	tom=tom+(60*60*24);
+	struct tm *bktom;
+	bktom=localtime(&tom);
+	bktom->tm_sec=0;
+	bktom->tm_min=0;
+	bktom->tm_hour=0;
+	time_t ttom=mktime(bktom);
+	double dif=difftime(ttom,now);
+/*set alarm*/
+	alarm((int)dif);
+}
 
 /*300ms*/
 struct timespec wait;
@@ -80,6 +131,11 @@ int ch;
 		gx=val[0];
 		gy=val[1];
 		gz=val[2];
+		if(log){
+			clock_gettime(CLOCK_REALTIME, &tstamp);
+			double lbuf[7]={ax,ay,az,gx,gy,gz,temp};
+			logData(flog,lbuf,7,&tstamp);
+		}
 		mvprintw(0,16,"%.3f",temp);
 		move(3,16);
 		clrtoeol();
@@ -131,10 +187,11 @@ int ch;
 			default:
 				break;
 		}
+		/*TODO ISSUE clrtobot leave some characters on screen*/
 		clrtobot();
 		refresh();
 	}
-		nanosleep(&wait,NULL);
+/*		nanosleep(&wait,NULL);*/
 		i=i2cRead(dev,INT_STATUS);
 	}
 	endwin();

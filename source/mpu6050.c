@@ -441,6 +441,8 @@ void setSampleRateDiv(int dev, int val){
 	int raw=0;
 	if(val>0){
 		raw=(gor/val)-1;
+		if(raw>255)
+			raw=255;
 	}
 	i2cWrite(dev,SMPLRT_DIV,(unsigned char)raw);
 }
