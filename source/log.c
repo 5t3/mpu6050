@@ -32,14 +32,16 @@ int init_log(){
 /*parse date, ctime return value="Wed Jun 30 21:49:08 1993\n"*/
 	char *date=ctime(&t);
 	char delim=' ';
-	char *wday=strtok(date,&delim);
-	char *month=strtok(NULL,&delim);
-	char *day=strtok(NULL,&delim);
+/*	char *wd=strtok(date,&delim);*/
+/*skip week day*/
+	strtok(date,&delim);
+	char *m=strtok(NULL,&delim);
+	char *d=strtok(NULL,&delim);
 /*skip hour:minute:seconds*/
 	strtok(NULL,&delim);
-	char *year=strtok(NULL,"\n");
-	char filename[18];
-	sprintf(filename,"%s-%s-%s-%s.log",year,month,day,wday);
+	char *y=strtok(NULL,"\n");
+	char filename[20];
+	sprintf(filename,"%s-%s-%s.log",y,m,d);
 /*open an existing log file*/
 	int log=open(filename,O_APPEND|O_RDWR);
 /*error, file does not exist, create a new one*/
@@ -92,4 +94,22 @@ void logData(int logFile, double *val,int nval, struct timespec *tstamp){
 	}
 	strl=strlen(lrow);
 	write(logFile,lrow,strl);
+}
+
+/*return in *r the time elapsed between x (oldest value) and y (newest value)*/
+void timespec_diff(struct timespec *r,struct timespec *x, struct timespec *y){
+long asec,ansec,bsec,bnsec;
+	asec=x->tv_sec;
+	ansec=x->tv_nsec;
+	bsec=y->tv_sec;
+	bnsec=y->tv_nsec;
+
+	r->tv_sec=bsec-asec;
+	if(ansec<bnsec){
+		r->tv_nsec=bnsec-ansec;
+	}
+	else{
+		r->tv_nsec=(1000000000-ansec)+bnsec;
+		r->tv_sec-=1;
+	}
 }

@@ -43,6 +43,8 @@ void main(int argc, char *argv[]){
 
 int log=0;
 struct timespec tstamp;
+tstamp.tv_sec=-1;
+tstamp.tv_nsec=-1;
 if(argc>1){
 	char *a=strtok(argv[1],"-");
 	if(a!=NULL && *a=='l'){
@@ -74,7 +76,7 @@ if(log){
 	alarm((int)dif);
 }
 
-/*300ms*/
+/*200ms*/
 struct timespec wait;
 wait.tv_sec=(long)0;
 wait.tv_nsec=(long)200000000;
@@ -131,10 +133,16 @@ int ch;
 		gx=val[0];
 		gy=val[1];
 		gz=val[2];
+		
 		if(log){
-			clock_gettime(CLOCK_REALTIME, &tstamp);
-			double lbuf[7]={ax,ay,az,gx,gy,gz,temp};
-			logData(flog,lbuf,7,&tstamp);
+		struct timespec t;
+		clock_gettime(CLOCK_REALTIME,&t);
+		timespec_diff(&t,&tstamp,&t);
+			if(tstamp.tv_sec <0 || t.tv_nsec>100000000){
+				clock_gettime(CLOCK_REALTIME, &tstamp);
+				double lbuf[7]={ax,ay,az,gx,gy,gz,temp};
+				logData(flog,lbuf,7,&tstamp);
+			}
 		}
 		mvprintw(0,16,"%.3f",temp);
 		move(3,16);
@@ -155,8 +163,6 @@ int ch;
 				averageFifo(dev,av,1000);
 				setOffsets(0,av);
 				setOffsets(1,&av[3]);
-/*				setAccelOffset(dev,av);*/
-/*				setGyroOffset(dev,&av[3]);*/
 				break;
 			case 'r':
 				stopMpu(dev);
